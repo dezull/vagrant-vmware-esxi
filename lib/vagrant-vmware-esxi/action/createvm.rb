@@ -784,6 +784,7 @@ module VagrantPlugins
               number_of_adapters = 1
             end
 
+            # TODO attach to network
             0.upto(number_of_adapters - 1) do |nic_index|
               new_vmx_contents << "ethernet#{nic_index}.networkName = \"#{@guestvm_network[nic_index]}\"\n"
               new_vmx_contents << "ethernet#{nic_index}.virtualDev = \"#{desired_nic_type}\"\n"

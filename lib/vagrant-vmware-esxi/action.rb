@@ -133,6 +133,7 @@ module VagrantPlugins
       end
 
 
+      # TODO add DestroyUnusedNetworks
       def self.action_destroy
         Vagrant::Action::Builder.new.tap do |b|
           b.use SetESXiPassword
@@ -183,6 +184,8 @@ module VagrantPlugins
           b.use Call, WaitForState, :running, 240 do |env1, b1|
             if env1[:result] == 'True'
               b1.use ReadState
+              b1.use CreateNetwork
+              b1.use ReadState
               b1.use Provision
               b1.use SyncedFolderCleanup
               b1.use SyncedFolders
@@ -203,6 +206,7 @@ module VagrantPlugins
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
       autoload :SetESXiPassword, action_root.join('esxi_password')
       autoload :CreateVM, action_root.join('createvm')
+      autoload :CreateNetwork, action_root.join('create_network')
       autoload :ReadState, action_root.join('read_state')
       autoload :ReadSSHInfo, action_root.join('read_ssh_info')
       autoload :SetNetworkIP, action_root.join('set_network_ip')
