@@ -66,7 +66,7 @@ module VagrantPlugins
         # Set the logging level on all "vagrant" namespaced
         # logs as long as we have a valid level.
         if level
-          logger = Log4r::Logger.new('vagrant_esxi')
+          logger = Log4r::Logger.new('vagrant_vmware_esxi')
           logger.outputters = Log4r::Outputter.stderr
           logger.level = level
           logger = nil

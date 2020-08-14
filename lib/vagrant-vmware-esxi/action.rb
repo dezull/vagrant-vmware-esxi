@@ -165,6 +165,7 @@ module VagrantPlugins
           b.use ConfigValidate
           b.use HandleBox
           b.use ReadState
+          b.use CreateNetwork
           b.use CreateVM
           b.use ReadState
           b.use Boot
@@ -183,8 +184,6 @@ module VagrantPlugins
           b.use ReadState
           b.use Call, WaitForState, :running, 240 do |env1, b1|
             if env1[:result] == 'True'
-              b1.use ReadState
-              b1.use CreateNetwork
               b1.use ReadState
               b1.use Provision
               b1.use SyncedFolderCleanup
