@@ -790,11 +790,10 @@ module VagrantPlugins
           # TODO make this default network configurable
           @guestvm_network << "VM Network"
           env[:machine].config.vm.networks.each do |type, options|
-            @guestvm_network << options[:esxi__port_group]
+            @guestvm_network << options[:esxi__port_group] if options[:esxi__port_group]
           end
 
-          @logger.info('vagrant-vmware-esxi, createvm: '\
-                       "esxi_virtual_network: #{@guestvm_network}")
+          @logger.info("Networks: #{@guestvm_network}")
         end
       end
     end

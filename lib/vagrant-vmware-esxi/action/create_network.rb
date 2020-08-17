@@ -18,6 +18,7 @@ module VagrantPlugins
       class CreateNetwork
         def initialize(app, env)
           @app = app
+          @logger = Log4r::Logger.new('vagrant_vmware_esxi::action::create_network')
         end
 
         def call(env)
@@ -27,19 +28,22 @@ module VagrantPlugins
         end
 
         def create_network
+          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                message: "Creating non-default networks...")
           ssh do
-            @env[:machine].config.vm.networks.each do |type, network_options|
+            @env[:machine].config.vm.networks.each.with_index do |(type, network_options), index|
               next if type != :private_network && type != :public_network
               set_network_configs(type, network_options)
               create_vswitch(network_options)
               create_port_group(network_options)
+
+              # TODO Show default vSwitch & port group
+              details = "vSwitch: #{network_options[:esxi__vswitch]}, "\
+                "port group: #{network_options[:esxi__port_group]}"
+              @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                      message: "Adapter #{index + 1}: #{details}")
             end
-
           end
-          # TODO create port groups
-
-          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                               message: "networks: #{@env[:machine].config.vm.networks}")
         end
 
         def ssh
@@ -58,16 +62,11 @@ module VagrantPlugins
         end
 
         def exec_ssh(cmd)
-          @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                                 message: "exec_ssh: #{cmd}")
-
+          @logger.debug("exec_ssh: #{cmd}")
           @ssh.exec!(cmd)
         end
 
         def set_network_configs(type, network_options)
-          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                               message: "networks: #{type} #{network_options}")
-
           # FIXME move to configuration validation
           private_network_configs = [:esxi__vswitch, :dhcp] & network_options.keys
           if type == :public_network && private_network_configs.any?
@@ -89,6 +88,7 @@ module VagrantPlugins
         end
 
         def create_vswitch(network_options)
+          @logger.info("Creating vSwitch #{network_options[:esxi__vswitch]} if not yet created")
           r = exec_ssh(
             "esxcli network vswitch standard list -v #{network_options[:esxi__vswitch]} ||"\
             "esxcli network vswitch standard add -v #{network_options[:esxi__vswitch]}")
@@ -116,6 +116,7 @@ module VagrantPlugins
             m = line.match(/(?<name>^.{#{max_name_len}}).*(?<vlan>\d+$)/)
             [m[:name].strip, m[:vlan].to_i]
           end.to_h
+          @logger.debug("Port group to VLAN ID mappings: #{port_group_vlan_map}")
 
           # port group already created
           return if port_group_vlan_map[network_options[:esxi__port_group]]
@@ -128,6 +129,7 @@ module VagrantPlugins
               message: "No more VLAN (max: #{MAX_VLAN}) to assign to the port group"
           end
 
+          @logger.info("Creating port group #{network_options[:esxi__port_group]}")
           # Use vim-cmd instead of esxcli, as it can add port group to vlan in a go
           r = exec_ssh("vim-cmd hostsvc/net/portgroup_add "\
                        "#{network_options[:esxi__vswitch]} "\
@@ -145,9 +147,11 @@ module VagrantPlugins
               if r.exitstatus != 0
                 raise Errors::ESXiError, message: "Unable to get default vSwitch."
               end
+              @logger.info("Default vSwitch: #{r}")
             end.strip
         end
 
+        # TODO make this as provider_config
         def default_port_group(vswitch)
           r = exec_ssh(
             "esxcli network vswitch standard list -v #{vswitch} |"\
@@ -157,8 +161,7 @@ module VagrantPlugins
           end
           port_groups = r.split("\n")
 
-          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                               message: "Port groups for #{vswitch}: #{port_groups}")
+          @logger.info("Available port groups for vSwitch #{vswitch}: #{port_groups}")
           port_groups.first
         end
       end
