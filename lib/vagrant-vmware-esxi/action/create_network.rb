@@ -81,9 +81,9 @@ module VagrantPlugins
             if network_options[:type] == "dhcp" || !network_options[:ip]
               default_port_group(network_options[:esxi__vswitch])
             else
-              netmask = network_options[:netmask] || 24
+              network_options[:netmask] ||= 24
 
-              ip = IPAddr.new("#{network_options[:ip]}/#{netmask}")
+              ip = IPAddr.new("#{network_options[:ip]}/#{network_options[:netmask]}")
               "#{network_options[:esxi__vswitch]}-#{ip.to_s}-#{ip.prefix}"
             end
         end
