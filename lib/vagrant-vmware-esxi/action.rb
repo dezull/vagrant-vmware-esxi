@@ -133,7 +133,6 @@ module VagrantPlugins
       end
 
 
-      # TODO add DestroyUnusedNetworks
       def self.action_destroy
         Vagrant::Action::Builder.new.tap do |b|
           b.use SetESXiPassword
@@ -141,6 +140,7 @@ module VagrantPlugins
             b1.use Halt unless env1[:machine_state] == 'powered_off'
             b1.use ReadState
             b1.use Destroy
+            b1.use DestroyUnusedNetworks
           end
         end
       end
@@ -213,6 +213,7 @@ module VagrantPlugins
       autoload :Halt, action_root.join('halt')
       autoload :Shutdown, action_root.join('shutdown')
       autoload :Destroy, action_root.join('destroy')
+      autoload :DestroyUnusedNetworks, action_root.join('destroy_unused_networks')
       autoload :Suspend, action_root.join('suspend')
       autoload :Resume, action_root.join('resume')
       autoload :Package, action_root.join('package')

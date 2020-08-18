@@ -1,4 +1,5 @@
 require 'net/ssh'
+require 'json'
 
 module VagrantPlugins
   module ESXi
@@ -51,6 +52,8 @@ module VagrantPlugins
                                 "port group: #{@default_port_group}")
           @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                 message: "Creating other networks...")
+          @created_vswitches = []
+          @created_port_groups = []
 
           ssh do
             @env[:machine].config.vm.networks.each.with_index do |(type, network_options), index|
@@ -66,6 +69,8 @@ module VagrantPlugins
                                       message: "Adapter #{adapter}: #{details}")
             end
           end
+
+          save_created_networks
         end
 
         def ssh
@@ -114,11 +119,16 @@ module VagrantPlugins
 
         def create_vswitch(network_options)
           @logger.info("Creating vSwitch '#{network_options[:esxi__vswitch]}' if not yet created")
-          r = exec_ssh(
-            "esxcli network vswitch standard list -v '#{network_options[:esxi__vswitch]}' || "\
-            "esxcli network vswitch standard add -v '#{network_options[:esxi__vswitch]}'")
+          r = exec_ssh("esxcli network vswitch standard list | "\
+                       "grep -E '^#{network_options[:esxi__vswitch]}$'")
+
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable create new vSwitch."
+            r = exec_ssh("esxcli network vswitch standard add -v '#{network_options[:esxi__vswitch]}'")
+            if r.exitstatus != 0
+              raise Errors::ESXiError, message: "Unable create new vSwitch."
+            end
+
+            @created_vswitches << network_options[:esxi__vswitch]
           end
         end
 
@@ -168,6 +178,8 @@ module VagrantPlugins
               message: "No more VLAN (max: #{MAX_VLAN}) to assign to the port group"
           end
 
+          # TODO check max port groups per vSwitch (512)
+
           vswitch = network_options[:esxi__vswitch] || @default_vswitch
           @logger.info("Creating port group #{network_options[:esxi__port_group]} on vSwitch '#{vswitch}'")
           # Use vim-cmd instead of esxcli, as it can add port group to vlan in a go
@@ -179,6 +191,15 @@ module VagrantPlugins
             raise Errors::ESXiError, message: "Cannot create port group "\
               "`#{network_options[:esxi__port_group]}`, VLAN #{vlan}"
           end
+
+          @created_port_groups << network_options[:esxi__port_group]
+        end
+
+        # Save networks created by this action
+        def save_created_networks
+          @logger.debug("Save created networks")
+          json = JSON.generate({ port_groups: @created_port_groups.uniq, vswitches: @created_vswitches.uniq })
+          File.write(@env[:machine].data_dir.join("networks"), json)
         end
       end
     end
