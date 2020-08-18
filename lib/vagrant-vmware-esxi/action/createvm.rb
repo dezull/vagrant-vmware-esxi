@@ -711,7 +711,6 @@ module VagrantPlugins
               number_of_adapters = 1
             end
 
-            # TODO attach to network
             0.upto(number_of_adapters - 1) do |nic_index|
               new_vmx_contents << "ethernet#{nic_index}.networkName = \"#{@guestvm_network[nic_index]}\"\n"
               new_vmx_contents << "ethernet#{nic_index}.virtualDev = \"#{desired_nic_type}\"\n"
@@ -786,9 +785,7 @@ module VagrantPlugins
         end
 
         def collect_networks(env)
-          @guestvm_network = []
-          # TODO make this default network configurable
-          @guestvm_network << "VM Network"
+          @guestvm_network = [env[:machine].provider_config.default_port_group]
           env[:machine].config.vm.networks.each do |type, options|
             @guestvm_network << options[:esxi__port_group] if options[:esxi__port_group]
           end
