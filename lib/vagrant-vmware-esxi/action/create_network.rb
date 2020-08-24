@@ -1,13 +1,9 @@
-require 'net/ssh'
 require 'json'
+require 'vagrant-vmware-esxi/util/esxcli'
 
 module VagrantPlugins
   module ESXi
     module Action
-      MAX_VLAN = 4094
-      VLANS = Array.new(MAX_VLAN) { |i| i + 1 }.freeze
-      PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
-
       # Automatically create network (Port group/VLAN) per subnet
       #
       # For example, when a box given 192.168.1.10/24, create 192.168.1.0/24 port group.
@@ -33,6 +29,12 @@ module VagrantPlugins
       # For (1) and (2), the vSwitch will also be created if not already created. In any case,
       # if esxi__port_group already exists, the esxi__vswitch is ignored (not in the VMX file).
       class CreateNetwork
+        include Util::ESXCLI
+
+        MAX_VLAN = 4094
+        VLANS = Array.new(MAX_VLAN) { |i| i + 1 }.freeze
+        PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
+
         def initialize(app, env)
           @app = app
           @logger = Log4r::Logger.new('vagrant_vmware_esxi::action::create_network')
@@ -55,13 +57,13 @@ module VagrantPlugins
           @created_vswitches = []
           @created_port_groups = []
 
-          ssh do
+          connect_ssh do
             @env[:machine].config.vm.networks.each.with_index do |(type, network_options), index|
               adapter = index + 2
               next if type != :private_network && type != :public_network
               set_network_configs(adapter, type, network_options)
-              create_vswitch(network_options)
-              create_port_group(network_options)
+              create_vswitch_unless_created(network_options)
+              create_port_group_unless_created(network_options)
 
               details = "vSwitch: #{network_options[:esxi__vswitch]}, "\
                 "port group: #{network_options[:esxi__port_group]}"
@@ -71,26 +73,6 @@ module VagrantPlugins
           end
 
           save_created_networks
-        end
-
-        def ssh
-          config = @env[:machine].provider_config
-          Net::SSH.start(config.esxi_hostname, config.esxi_username,
-                         password:                   config.esxi_password,
-                         port:                       config.esxi_hostport,
-                         keys:                       config.local_private_keys,
-                         timeout:                    20,
-                         number_of_password_prompts: 0,
-                         non_interactive:            true
-                        ) do |ssh|
-                          @ssh = ssh
-                          yield
-                        end
-        end
-
-        def exec_ssh(cmd)
-          @logger.debug("exec_ssh: #{cmd}")
-          @ssh.exec!(cmd)
         end
 
         def set_network_configs(adapter, type, network_options)
@@ -117,47 +99,21 @@ module VagrantPlugins
             end
         end
 
-        def create_vswitch(network_options)
+        def create_vswitch_unless_created(network_options)
           @logger.info("Creating vSwitch '#{network_options[:esxi__vswitch]}' if not yet created")
-          r = exec_ssh("esxcli network vswitch standard list | "\
-                       "grep -E '^#{network_options[:esxi__vswitch]}$'")
 
-          if r.exitstatus != 0
-            r = exec_ssh("esxcli network vswitch standard add -v '#{network_options[:esxi__vswitch]}'")
-            if r.exitstatus != 0
-              raise Errors::ESXiError, message: "Unable create new vSwitch."
+          vswitch = network_options[:esxi__vswitch]
+          unless has_vswitch? vswitch
+            if create_vswitch(vswitch)
+              @created_vswitches << vswitch
+            else
+              raise Errors::ESXiError, message: "Unable create new vSwitch '#{vswitch}'."
             end
-
-            @created_vswitches << network_options[:esxi__vswitch]
           end
         end
 
-        def create_port_group(network_options)
-          r = exec_ssh("esxcli network vswitch standard portgroup list")
-          if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get port groups"
-          end
-
-          # Parse output such as:
-          # Name                           Virtual Switch    Active Clients  VLAN ID
-          # -----------------------------  ----------------  --------------  -------
-          # Management Network             vSwitch0                       1        0
-          # Internal                       Internal                       0        0
-
-          lines = r.split("\n")
-          max_name_len, max_vswitch_len, max_clients_len, max_vlan_len =
-            lines[1].match(PORT_GROUP_HEADER_RE).captures.map(&:length)
-
-          port_groups = lines[2..-1].map do |line|
-            m = line.match(/^
-              (?<name>.{#{max_name_len}})\s+
-              (?<vswitch>.{#{max_vswitch_len}})\s+
-              (?<clients>.{#{max_clients_len}})\s+
-              (?<vlan>.{#{max_vlan_len}})
-            $/x)
-
-            [m[:name].strip, { vswitch: m[:vswitch].strip, vlan: m[:vlan].to_i }]
-          end.to_h
+        def create_port_group_unless_created(network_options)
+          port_groups = get_port_groups
           @logger.debug("Port groups: #{port_groups}")
 
           if port_group = port_groups[network_options[:esxi__port_group]]
@@ -182,12 +138,7 @@ module VagrantPlugins
 
           vswitch = network_options[:esxi__vswitch] || @default_vswitch
           @logger.info("Creating port group #{network_options[:esxi__port_group]} on vSwitch '#{vswitch}'")
-          # Use vim-cmd instead of esxcli, as it can add port group to vlan in a go
-          r = exec_ssh("vim-cmd hostsvc/net/portgroup_add "\
-                       "'#{vswitch}' "\
-                       "'#{network_options[:esxi__port_group]}' "\
-                       "#{vlan}")
-          if r.exitstatus != 0
+          unless create_port_group(network_options[:esxi__port_group], vswitch, vlan)
             raise Errors::ESXiError, message: "Cannot create port group "\
               "`#{network_options[:esxi__port_group]}`, VLAN #{vlan}"
           end

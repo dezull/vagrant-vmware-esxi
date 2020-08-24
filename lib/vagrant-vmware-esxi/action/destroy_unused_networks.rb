@@ -1,4 +1,3 @@
-require 'net/ssh'
 require 'vagrant-vmware-esxi/util/esxcli'
 
 module VagrantPlugins
@@ -15,7 +14,7 @@ module VagrantPlugins
         def call(env)
           @env = env
           @vmid = env[:machine].id
-          ssh { destroy_networks }
+          connect_ssh { destroy_networks }
           @app.call(env)
         end
 
@@ -28,7 +27,7 @@ module VagrantPlugins
           @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                 message: "Destroying unused port groups that were created automatically...")
 
-          all_port_groups = get_port_groups(@ssh)
+          all_port_groups = get_port_groups
           @logger.debug("all port groups: #{all_port_groups.inspect}")
           created_networks["port_groups"].each do |port_group|
             found = all_port_groups[port_group]
@@ -41,7 +40,9 @@ module VagrantPlugins
         def destroy_unused_port_group(port_group, vswitch)
           @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                 message: "Destroying port group '#{port_group}'")
-          remove_port_group(@ssh, port_group, vswitch)
+          unless remove_port_group(port_group, vswitch)
+            raise Errors::ESXiError, message: "Unable to remove port group '#{port_group}'"
+          end
         end
 
         def destroy_unused_vswitches
@@ -50,7 +51,7 @@ module VagrantPlugins
 
           @logger.debug("all port groups: #{created_networks["vswitches"].inspect}")
           created_networks["vswitches"].each do |vswitch|
-            if vswitch_port_groups(@ssh, vswitch).empty?
+            if get_vswitch_port_groups(vswitch).empty?
               destroy_unused_vswitch(vswitch)
             end
           end
@@ -59,7 +60,9 @@ module VagrantPlugins
         def destroy_unused_vswitch(vswitch)
           @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                   message: "Destroying vswitch '#{vswitch}'")
-          remove_vswitch(@ssh, vswitch)
+          unless remove_vswitch(vswitch)
+            raise Errors::ESXiError, message: "Unable to remove vswitch '#{vswitch}'"
+          end
         end
 
         def created_networks
@@ -71,21 +74,6 @@ module VagrantPlugins
               { "port_groups" => [], "vswitches" => [] }
             end
           )
-        end
-
-        def ssh
-          config = @env[:machine].provider_config
-          Net::SSH.start(config.esxi_hostname, config.esxi_username,
-                         password:                   config.esxi_password,
-                         port:                       config.esxi_hostport,
-                         keys:                       config.local_private_keys,
-                         timeout:                    20,
-                         number_of_password_prompts: 0,
-                         non_interactive:            true
-                        ) do |ssh|
-                          @ssh = ssh
-                          yield
-                        end
         end
       end
     end
