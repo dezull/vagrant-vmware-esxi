@@ -6,8 +6,12 @@ module VagrantPlugins
       class DestroyUnusedNetworks
         include Util::ESXCLI
 
+        IP_RE = '(\d{1,3}\.){3}\d{1,3}'
+        IP_PREFIX_RE = '\d{1,2}'
+
         def initialize(app, env)
           @app = app
+          @scope = env[:scope]
           @logger = Log4r::Logger.new('vagrant_vmware_esxi::action::destroy_unused_networks')
         end
 
@@ -19,8 +23,29 @@ module VagrantPlugins
         end
 
         def destroy_networks
-          destroy_unused_port_groups if @env[:machine].provider_config.destroy_unused_port_groups
-          destroy_unused_vswitches if @env[:machine].provider_config.destroy_unused_vswitches
+          if @scope == :all
+            # Destroy ALL unused auto port groups, including the ones created by another `vagrant up`,
+            # which match pattern such as:
+            #   vSwitch0-192.168.100.0-24 ({vswitch}-{net-address}-{prefix})
+            # This WON'T destroy any vSwitches 
+            destroy_unused_auto_port_groups
+          else
+            # Destroy unused port groups that were created by this `vagrant up` 
+            destroy_unused_port_groups if @env[:machine].provider_config.destroy_unused_port_groups
+            destroy_unused_vswitches if @env[:machine].provider_config.destroy_unused_vswitches
+          end
+        end
+
+        def destroy_unused_auto_port_groups
+          vswitch = @env[:machine].provider_config.default_vswitch
+          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                message: "Destroying unused auto port groups on vswitch '#{vswitch}'...")
+
+          get_port_groups.each do |name, port_group|
+            if auto_port_group_re.match?(name) && port_group[:clients] == 0
+              destroy_unused_port_group(name, port_group[:vswitch])
+            end
+          end
         end
 
         def destroy_unused_port_groups
@@ -74,6 +99,12 @@ module VagrantPlugins
               { "port_groups" => [], "vswitches" => [] }
             end
           )
+        end
+
+        def auto_port_group_re
+          vswitch = Regexp.escape(@env[:machine].provider_config.default_vswitch)
+
+          @auto_port_group_re ||= /^#{vswitch}-#{IP_RE}-#{IP_PREFIX_RE}$/
         end
       end
     end

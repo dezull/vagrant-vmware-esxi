@@ -145,6 +145,17 @@ module VagrantPlugins
         end
       end
 
+      def self.action_destroy_networks
+        Vagrant::Action::Builder.new.tap do |b|
+          b.use SetESXiPassword
+          b.use Call, DestroyUnusedNetworksConfirm do |env1, b1|
+            if env1[:result]
+              b1.use DestroyUnusedNetworks
+            end
+          end
+        end
+      end
+
       def self.action_reload
         Vagrant::Action::Builder.new.tap do |b|
           b.use SetESXiPassword
@@ -214,6 +225,7 @@ module VagrantPlugins
       autoload :Shutdown, action_root.join('shutdown')
       autoload :Destroy, action_root.join('destroy')
       autoload :DestroyUnusedNetworks, action_root.join('destroy_unused_networks')
+      autoload :DestroyUnusedNetworksConfirm, action_root.join('destroy_unused_networks_confirm')
       autoload :Suspend, action_root.join('suspend')
       autoload :Resume, action_root.join('resume')
       autoload :Package, action_root.join('package')

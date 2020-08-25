@@ -38,6 +38,11 @@ module VagrantPlugins
         SnapshotInfo
       end
 
+      command('destroy-networks') do
+        require_relative "command/destroy_networks"
+        Command::DestroyNetworks
+      end
+
       # This initializes the internationalization strings.
       def self.setup_i18n
         require 'pathname'
