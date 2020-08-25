@@ -1,5 +1,4 @@
 class ::IPAddr
-  # For ruby < 2.5
   def prefix
     case @family
     when Socket::AF_INET
