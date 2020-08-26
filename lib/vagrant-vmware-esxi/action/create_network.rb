@@ -31,6 +31,8 @@ module VagrantPlugins
       class CreateNetwork
         include Util::ESXCLI
 
+        CREATE_NETWORK_MUTEX = Mutex.new
+
         MAX_VLAN = 4094
         VLANS = Array.new(MAX_VLAN) { |i| i + 1 }.freeze
         PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
@@ -49,30 +51,32 @@ module VagrantPlugins
         end
 
         def create_network
-          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                                message: "Default network on Adapter 1: vSwitch: #{@default_vswitch}, "\
-                                "port group: #{@default_port_group}")
-          @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                                message: "Creating other networks...")
-          @created_vswitches = []
-          @created_port_groups = []
+          CREATE_NETWORK_MUTEX.synchronize do
+            @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                  message: "Default network on Adapter 1: vSwitch: #{@default_vswitch}, "\
+                                  "port group: #{@default_port_group}")
+            @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                  message: "Creating other networks...")
+            @created_vswitches = []
+            @created_port_groups = []
 
-          connect_ssh do
-            @env[:machine].config.vm.networks.each.with_index do |(type, network_options), index|
-              adapter = index + 2
-              next if type != :private_network && type != :public_network
-              set_network_configs(adapter, type, network_options)
-              create_vswitch_unless_created(network_options)
-              create_port_group_unless_created(network_options)
+            connect_ssh do
+              @env[:machine].config.vm.networks.each.with_index do |(type, network_options), index|
+                adapter = index + 2
+                next if type != :private_network && type != :public_network
+                set_network_configs(adapter, type, network_options)
+                create_vswitch_unless_created(network_options)
+                create_port_group_unless_created(network_options)
 
-              details = "vSwitch: #{network_options[:esxi__vswitch]}, "\
-                "port group: #{network_options[:esxi__port_group]}"
-              @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
-                                      message: "Adapter #{adapter}: #{details}")
+                details = "vSwitch: #{network_options[:esxi__vswitch]}, "\
+                  "port group: #{network_options[:esxi__port_group]}"
+                @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                        message: "Adapter #{adapter}: #{details}")
+              end
             end
-          end
 
-          save_created_networks
+            save_created_networks
+          end
         end
 
         def set_network_configs(adapter, type, network_options)
