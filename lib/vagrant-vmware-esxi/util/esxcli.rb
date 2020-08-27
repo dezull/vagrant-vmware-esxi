@@ -3,6 +3,7 @@ module VagrantPlugins
     module Util
       module ESXCLI
         PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
+        PORT_GROUP_NAME_IN_VMSVC_RE = /^\s*name = "(?<name>.+)",\s*$/
 
         def has_vswitch?(vswitch)
           r = exec_ssh("esxcli network vswitch standard list | "\
@@ -17,7 +18,7 @@ module VagrantPlugins
           r.exitstatus == 0
         end
 
-        # @return [Hash] Map of port group to :vswitch, :clients and :vlan 
+        # @return [Hash] Map of port group to :vswitch, :clients (running VMs) and :vlan 
         def get_port_groups
           r = exec_ssh("esxcli network vswitch standard portgroup list")
           if r.exitstatus != 0
@@ -50,7 +51,33 @@ module VagrantPlugins
           end.to_h
         end
 
-        def get_vswitch_port_groups(vswitch)
+        # Port groups that are attached to any VM
+        def get_active_port_group_names
+          r = exec_ssh("vim-cmd vmsvc/getallvms | cut -d' ' -f1 | tail -n +2")
+          if r.exitstatus != 0
+            raise Errors::ESXiError, message: "Unable to get active port groups"
+          end
+
+          port_group_names = []
+
+          r.strip.split("\n").each do |vmid|
+            r = exec_ssh("vim-cmd vmsvc/get.networks #{vmid}")
+            if r.exitstatus != 0
+              raise Errors::ESXiError, message: "Unable to get port groups for vm '#{vmid}'"
+            end
+
+            r.strip.split("\n").each do |line|
+              if matches = PORT_GROUP_NAME_IN_VMSVC_RE.match(line)
+                port_group_name = matches[:name]
+                port_group_names << port_group_name unless port_group_names.include?(port_group_name)
+              end
+            end
+          end
+
+          port_group_names
+        end
+
+        def get_vswitch_port_group_names(vswitch)
           r = exec_ssh("esxcli network vswitch standard list -v '#{vswitch}' | "\
                        "grep Portgroups | "\
                        'sed -E "s/^\s+Portgroups: //"')

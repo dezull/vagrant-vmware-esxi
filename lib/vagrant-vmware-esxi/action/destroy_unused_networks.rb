@@ -41,8 +41,10 @@ module VagrantPlugins
           @env[:ui].info I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                 message: "Destroying unused auto port groups on vswitch '#{vswitch}'...")
 
+          active_port_groups = get_active_port_group_names
+          @logger.debug("active port groups: #{active_port_groups}")
           get_port_groups.each do |name, port_group|
-            if auto_port_group_re.match?(name) && port_group[:clients] == 0
+            if auto_port_group_re.match?(name) && !active_port_groups.include?(name)
               destroy_unused_port_group(name, port_group[:vswitch])
             end
           end
@@ -53,10 +55,12 @@ module VagrantPlugins
                                 message: "Destroying unused port groups that were created automatically...")
 
           all_port_groups = get_port_groups
+          active_port_groups = get_active_port_group_names
           @logger.debug("all port groups: #{all_port_groups.inspect}")
+          @logger.debug("active port groups: #{active_port_groups}")
           created_networks["port_groups"].each do |port_group|
             found = all_port_groups[port_group]
-            if found[:clients] == 0
+            unless active_port_groups.include? port_group
               destroy_unused_port_group(port_group, found[:vswitch])
             end
           end
@@ -76,7 +80,7 @@ module VagrantPlugins
 
           @logger.debug("all port groups: #{created_networks["vswitches"].inspect}")
           created_networks["vswitches"].each do |vswitch|
-            if get_vswitch_port_groups(vswitch).empty?
+            if get_vswitch_port_group_names(vswitch).empty?
               destroy_unused_vswitch(vswitch)
             end
           end

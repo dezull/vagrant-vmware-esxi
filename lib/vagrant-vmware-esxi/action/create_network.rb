@@ -35,7 +35,6 @@ module VagrantPlugins
 
         MAX_VLAN = 4094
         VLANS = Array.new(MAX_VLAN) { |i| i + 1 }.freeze
-        PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
 
         def initialize(app, env)
           @app = app
@@ -153,8 +152,18 @@ module VagrantPlugins
         # Save networks created by this action
         def save_created_networks
           @logger.debug("Save created networks")
-          json = JSON.generate({ port_groups: @created_port_groups.uniq, vswitches: @created_vswitches.uniq })
-          File.write(@env[:machine].data_dir.join("networks"), json)
+          file = @env[:machine].data_dir.join("networks")
+
+          if file.exist?
+            json = JSON.parse(file.read) 
+            @logger.debug("Previously saved networks: #{json}")
+            json["port_groups"] = json["port_groups"].concat(@created_port_groups.uniq).uniq
+            json["vswitches"] = json["vswitches"].concat(@created_vswitches.uniq).uniq
+          else
+            json = { port_groups: @created_port_groups.uniq, vswitches: @created_vswitches.uniq }
+          end
+
+          File.write(file, JSON.generate(json))
         end
       end
     end
