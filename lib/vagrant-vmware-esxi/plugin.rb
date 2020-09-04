@@ -43,6 +43,11 @@ module VagrantPlugins
         Command::DestroyNetworks
       end
 
+      command('vmrc') do
+        require_relative "command/vmrc"
+        Command::VMRC
+      end
+
       # This initializes the internationalization strings.
       def self.setup_i18n
         require 'pathname'

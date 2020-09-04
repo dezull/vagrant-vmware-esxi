@@ -111,6 +111,19 @@ module VagrantPlugins
           r.exitstatus == 0
         end
 
+        def get_vmrc_uri
+          machine = @env[:machine]
+          hostname = machine.provider_config.esxi_hostname
+          r = exec_ssh("vim-cmd vmsvc/acquireticket #{machine.id} mks | "\
+                       "sed 's/localhost/#{hostname}/' | " \
+                       "grep -E '^vmrc://'")
+          if r.exitstatus != 0
+            raise Errors::ESXiError, message: "Unable to get VMRC URI"
+          end
+
+          r.strip
+        end
+
         # Client should probably never use this, add a method in this module instead
         def exec_ssh(cmd)
           @_ssh.exec!(cmd).tap do |r|
@@ -135,8 +148,9 @@ module VagrantPlugins
             non_interactive: true
           ) do |ssh|
             @_ssh = ssh
-            yield
+            r = yield
             @_ssh = nil
+            r
           end
         end
       end

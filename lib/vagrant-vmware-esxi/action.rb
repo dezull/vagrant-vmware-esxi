@@ -213,6 +213,14 @@ module VagrantPlugins
         end
       end
 
+      def self.action_vmrc_uri
+        Vagrant::Action::Builder.new.tap do |b|
+          b.use SetESXiPassword
+          b.use ReadState
+          b.use VMRC_URI
+        end
+      end
+
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
       autoload :SetESXiPassword, action_root.join('esxi_password')
       autoload :CreateVM, action_root.join('createvm')
@@ -236,6 +244,7 @@ module VagrantPlugins
       autoload :SnapshotRestore, action_root.join('snapshot_restore')
       autoload :WaitForState, action_root.join('wait_for_state')
       autoload :Address, action_root.join('address')
+      autoload :VMRC_URI, action_root.join('vmrc_uri')
     end
   end
 end
