@@ -1,5 +1,6 @@
 require 'log4r'
 require 'net/ssh'
+require 'vagrant-vmware-esxi/util/esxcli'
 
 module VagrantPlugins
   module ESXi
@@ -9,12 +10,15 @@ module VagrantPlugins
       # Creates a new VM guest using ovftool.
       # Does final tweeks to the VM, grow boot disk, create additional storage, etc...
       class CreateVM
+        include Util::ESXCLI
+
         def initialize(app, _env)
           @app    = app
           @logger = Log4r::Logger.new('vagrant_vmware_esxi::action::createvm')
         end
 
         def call(env)
+          @env = env
           createvm(env)
           @app.call(env)
         end
@@ -486,6 +490,7 @@ module VagrantPlugins
             src_path = clone_from_vm_path
           end
           ovf_cmd = "ovftool --noSSLVerify #{overwrite_opts} #{ovf_debug} "\
+                "--noDisks "\
                 "--acceptAllEulas "\
                 "-dm=#{guest_disk_type} #{local_laxoption} "\
                 "-ds=\"#{@guestvm_dsname}\" --name=\"#{desired_guest_name}\" "\
@@ -518,6 +523,21 @@ module VagrantPlugins
           else
             File.delete(new_vmx_file)
             FileUtils.remove_entry tmpdir unless tmpdir.nil?
+          end
+
+          if config.clone_from_vm
+            connect_ssh do
+              env[:ui].info I18n.t('vagrant_vmware_esxi.vagrant_vmware_esxi_message',
+                                   message: "Cloning VM disk '#{config.clone_from_vm}' into '#{desired_guest_name}'")
+              datastore_path = get_datastore_path(@guestvm_dsname)
+              @logger.info("Datastore path: #{datastore_path}")
+              if clone_vm_disk(config.clone_from_vm, desired_guest_name, datastore_path)
+                env[:ui].info I18n.t('vagrant_vmware_esxi.vagrant_vmware_esxi_message', message: "Disk cloned")
+              else
+                raise Errors::ESXiError,
+                      message: "Unable to clone disk '#{config.clone_from_vm}' into '#{desired_guest_name}'"
+              end
+            end
           end
 
           #

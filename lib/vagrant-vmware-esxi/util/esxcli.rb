@@ -4,6 +4,8 @@ module VagrantPlugins
       module ESXCLI
         PORT_GROUP_HEADER_RE = /^(?<name>-+)\s+(?<vswitch>-+)\s+(?<clients>-+)\s+(?<vlan>-+)$/
         PORT_GROUP_NAME_IN_VMSVC_RE = /^\s*name = "(?<name>.+)",\s*$/
+        DATASTORE_PATH_IN_ESXCLI_RE = /.+"(?<path>.+)".+/
+        VM_INFO_IN_VMSVC_RE = /(?<id>\d+)\s+(?<name>\S+)\s+\[(?<datastore>\S+)\]\s+(?<vmx>\S+)\s+(?<type>\S+)\s+(?<vmx_version>\S+).*/
 
         def has_vswitch?(vswitch)
           r = exec_ssh("esxcli network vswitch standard list | "\
@@ -49,6 +51,16 @@ module VagrantPlugins
               vlan: m[:vlan].to_i
             }]
           end.to_h
+        end
+
+        def get_vm_info(vm_name)
+          r = exec_ssh("vim-cmd vmsvc/getallvms | grep -E '\\s+#{vm_name}\\s+'")
+          if r.exitstatus != 0
+            raise Errors::ESXiError, message: "Unable to get VM info"
+          end
+
+          m = VM_INFO_IN_VMSVC_RE.match(r.strip)
+          m.named_captures
         end
 
         # Port groups that are attached to any VM
@@ -122,6 +134,30 @@ module VagrantPlugins
           end
 
           r.strip
+        end
+
+        def get_datastore_path(datastore_name)
+          r = exec_ssh("vim-cmd hostsvc/datastore/info '#{datastore_name}' | grep path")
+          if r.exitstatus != 0
+            raise Errors::ESXiError, message: "Unable to find datastore #{datastore_name}"
+          end
+
+          m = DATASTORE_PATH_IN_ESXCLI_RE.match(r.strip)
+          unless m && m[:path]
+            raise Errors::ESXiError, message: "Unable to find datastore #{datastore_name}"
+          end
+
+          m[:path]
+        end
+
+        def clone_vm_disk(source_vm_name, target_vm_name, datastore_path)
+          vm_info = get_vm_info(source_vm_name)
+          src_disk = "#{datastore_path}/#{vm_info["vmx"].gsub(/vmx$/, "vmdk")}"
+          target_disk = "#{datastore_path}/#{target_vm_name}/#{target_vm_name}.vmdk"
+          r = exec_ssh("rm #{datastore_path}/#{target_vm_name}/*.vmdk && "\
+                       "vmkfstools -d thin -i '#{src_disk}' '#{target_disk}'")
+
+          r.exitstatus == 0
         end
 
         # Client should probably never use this, add a method in this module instead
