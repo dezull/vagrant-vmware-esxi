@@ -74,6 +74,9 @@ module VagrantPlugins
 
           r.strip.split("\n").each do |vmid|
             r = exec_ssh("vim-cmd vmsvc/get.networks #{vmid}")
+
+            next if r.match? "Unable to find a VM corresponding"
+
             if r.exitstatus != 0
               raise Errors::ESXiError, message: "Unable to get port groups for vm '#{vmid}'"
             end
