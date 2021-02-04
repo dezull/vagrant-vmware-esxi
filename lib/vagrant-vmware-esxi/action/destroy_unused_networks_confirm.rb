@@ -6,9 +6,7 @@ module VagrantPlugins
       class DestroyUnusedNetworksConfirm < Confirm
         def initialize(app, env)
           force_key = :force_confirm_destroy_networks
-          # message   = I18n.t("vagrant.commands.destroy.confirmation",
-                             # name: env[:machine].name)
-          message = "Destroy all networks? "
+          message = I18n.t("vagrant_vmware_esxi.commands.destroy_networks.all.confirmation")
 
           super(app, env, message, force_key, allowed: ["y", "n", "Y", "N"])
         end

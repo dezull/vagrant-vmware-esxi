@@ -1,3 +1,5 @@
+require "net/ssh"
+
 module VagrantPlugins
   module ESXi
     module Util
@@ -127,7 +129,7 @@ module VagrantPlugins
         end
 
         def get_vmrc_uri
-          machine = @env[:machine]
+          machine = vagrant_env[:machine]
           hostname = machine.provider_config.esxi_hostname
           r = exec_ssh("vim-cmd vmsvc/acquireticket #{machine.id} mks | "\
                        "sed 's/localhost/#{hostname}/' | " \
@@ -170,12 +172,15 @@ module VagrantPlugins
           end
         end
 
-        def connect_ssh
+        # @param [Hash|VagrantPlugins::ESXi::Config] env_or_config
+        def connect_ssh(env_or_config = @env)
+          @vagrant_env = env_or_config unless env_or_config.is_a?(::VagrantPlugins::ESXi::Config)
+          config = @vagrant_env ? @vagrant_env[:machine].provider_config : env_or_config
+
           if @_ssh
             raise Errors::ESXiError, message: "SSH session already established"
           end
 
-          config = @env[:machine].provider_config
           Net::SSH.start(
             config.esxi_hostname,
             config.esxi_username,
@@ -191,7 +196,16 @@ module VagrantPlugins
             @_ssh = nil
             r
           end
+        rescue => e
+          raise Errors::ESXiError, message: "Failed to establish SSH session:\n" + e.full_message
         end
+
+        private
+
+          def vagrant_env
+            raise if @vagrant_env.nil?
+            @vagrant_env
+          end
       end
     end
   end

@@ -75,3 +75,10 @@ en:
           not created
         long: |-
           No Virtual Machines are created.
+    commands:
+      destroy_networks:
+        confirmed: y
+        all:
+          confirmation: "Are you sure to destroy all networks? [y/N] "
+        one:
+          confirmation: "Destroy network %{network}? [y/N] "
