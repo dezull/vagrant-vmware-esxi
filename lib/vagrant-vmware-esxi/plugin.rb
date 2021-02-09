@@ -38,9 +38,9 @@ module VagrantPlugins
         SnapshotInfo
       end
 
-      command('destroy-networks') do
-        require_relative "command/destroy_networks"
-        Command::DestroyNetworks
+      command('network') do
+        require_relative "command/network/root"
+        Command::Root
       end
 
       command('vmrc') do

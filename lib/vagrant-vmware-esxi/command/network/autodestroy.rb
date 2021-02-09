@@ -2,12 +2,14 @@ require "optparse"
 require 'vagrant-vmware-esxi/util/esxcli'
 require 'vagrant-vmware-esxi/config'
 require 'io/console'
+require_relative 'mixin_esxi_opts'
 
 module VagrantPlugins
   module ESXi
     module Command
-      class DestroyNetworks < Vagrant.plugin("2", :command)
+      class AutoDestroy < Vagrant.plugin("2", :command)
         include ::VagrantPlugins::ESXi::Util::ESXCLI
+        include MixinESXiOpts
 
         IP_RE = '(\d{1,3}\.){3}\d{1,3}'
         IP_PREFIX_RE = '\d{1,2}'
@@ -19,37 +21,13 @@ module VagrantPlugins
         def execute
           @force = false
 
-          esxi_config = ::VagrantPlugins::ESXi::Config.new.tap do |c|
-            c.esxi_password = nil
-            c.finalize!
-          end
-
           opts = OptionParser.new do |o|
-            o.banner = "Usage: vagrant destroy-networks"
+            o.banner = "Usage: vagrant network destroy"
             o.separator ""
-            o.separator "This command will try to use ESXi configuration found in existing Vagrant environment. "\
-                        "If you are running this outside an environment, you should provide --esxi-* configuration."\
-                        "It also assumes network names that follow the pattern {vSwitchName}-{network-address}-{network-mask}"\
+
+            o.separator "It assumes network names that follow the pattern {vSwitchName}-{network-address}-{network-mask}"\
                         "are created automatically by this plugin."
-            o.separator ""
-            o.separator "Options:"
-            o.separator ""
-
-            o.on("--esxi-user USER", "ESXi SSH user.") do |u|
-              esxi_config.esxi_username = u
-            end
-
-            o.on("--esxi-password PASSWORD", "ESXi SSH password. If required and not provided, it will prompt.") do |p|
-              esxi_config.esxi_password = p
-            end
-
-            o.on("--esxi-host HOST", "ESXi host.") do |h|
-              esxi_config.esxi_hostname = h
-            end
-
-            o.on("--esxi-port PORT", "ESXi SSH port.") do |p|
-              esxi_config.esxi_hostport = p
-            end
+            build_esxi_opts(o)
 
             o.on("-f", "--force", "Destroy without confirmation.") do |f|
               @force = f
@@ -59,13 +37,7 @@ module VagrantPlugins
           argv = parse_options(opts)
           return if !argv
 
-          if @env.root_path
-            destroy_networks_with_env
-          else
-            debug_config = esxi_config.instance_variables_hash.slice("esxi_hostname", "esxi_hostport", "esxi_username")
-            @env.ui.warn "Couldn't not find ESXi configuration in any Vagrant environment, using this instead: #{debug_config}"
-            destroy_networks_with_config(esxi_config)
-          end
+          provider_configs_in_env? ? destroy_networks_with_env : destroy_networks_with_config(esxi_config)
 
           0
         end
@@ -74,26 +46,13 @@ module VagrantPlugins
 
           # Use ESXi configuration from vagrant environment
           def destroy_networks_with_env
-            machines = []
-            with_target_vms { |machine| machines << machine }
-            # Get unique ESXi configurations
-            machines
-              .filter { |machine| machine.provider_name == :vmware_esxi }
-              .uniq { |machine| machine.provider_config }
-              .each do |machine|
-                destroy_networks_with_config(machine.provider_config)
-              end
+            provider_configs_in_env.each { |config| destroy_networks_with_config(config) }
           end
 
           # Use supplied ESXi configuration
           def destroy_networks_with_config(esxi_config)
-            raise Errors::ESXiError, message: "--esxi-host is required" if esxi_config.esxi_hostname.nil?
-
-            esxi_config.esxi_password ||= @env.ui.ask(
-              "#{esxi_config.esxi_username}@#{esxi_config.esxi_hostname} password: ",
-              echo: false
-            )
-
+            raise_missing!(:esxi_hostname)
+            esxi_config.esxi_password ||= ask_password
             destroy_networks(esxi_config)
           end
 

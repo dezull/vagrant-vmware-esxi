@@ -30,6 +30,8 @@ module VagrantPlugins
             raise Errors::ESXiError, message: "Unable to get port groups"
           end
 
+          # Active Client is *running* VM attached to the network
+
           # Parse output such as:
           # Name                           Virtual Switch    Active Clients  VLAN ID
           # -----------------------------  ----------------  --------------  -------
@@ -195,6 +197,8 @@ module VagrantPlugins
             raise Errors::ESXiError, message: "SSH session already established"
           end
 
+          error = nil
+          r = nil
           Net::SSH.start(
             config.esxi_hostname,
             config.esxi_username,
@@ -206,12 +210,18 @@ module VagrantPlugins
             non_interactive: true
           ) do |ssh|
             @_ssh = ssh
-            r = yield
+            begin
+              r = yield
+            rescue => e
+              error = e
+            end
             @_ssh = nil
-            r
           end
-        rescue => e
-          raise Errors::ESXiError, message: "Failed to establish SSH session:\n" + e.full_message
+        rescue ::Net::SSH::Exception => e
+          raise Errors::ESXiError, message: "SSH Error:\n" + e.full_message
+        ensure
+          raise error if error
+          r
         end
 
         private
