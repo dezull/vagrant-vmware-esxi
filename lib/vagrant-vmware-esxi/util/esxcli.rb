@@ -8,6 +8,7 @@ module VagrantPlugins
         PORT_GROUP_NAME_IN_VMSVC_RE = /^\s*name = "(?<name>.+)",\s*$/
         DATASTORE_PATH_IN_ESXCLI_RE = /.+"(?<path>.+)".+/
         VM_INFO_IN_VMSVC_RE = /(?<id>\d+)\s+(?<name>\S+)\s+\[(?<datastore>\S+)\]\s+(?<vmx>\S+)\s+(?<type>\S+)\s+(?<vmx_version>\S+).*/
+        VSWITCH_PORTGROUPS_IN_ESXCLI_RE = /^\s+Portgroups: (?<portgroups>.+)$/
 
         def has_vswitch?(vswitch)
           r = exec_ssh("esxcli network vswitch standard list | "\
@@ -67,14 +68,10 @@ module VagrantPlugins
 
         # Port groups that are attached to any VM
         def get_active_port_group_names
-          r = exec_ssh("vim-cmd vmsvc/getallvms | cut -d' ' -f1 | tail -n +2")
-          if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get active port groups"
-          end
-
           port_group_names = []
+          vmids = get_vms.map { |vm| vm[:id] }
 
-          r.strip.split("\n").each do |vmid|
+          vmids.each do |vmid|
             r = exec_ssh("vim-cmd vmsvc/get.networks #{vmid}")
 
             next if r.match? "Unable to find a VM corresponding"
@@ -95,15 +92,14 @@ module VagrantPlugins
         end
 
         def get_vswitch_port_group_names(vswitch)
-          r = exec_ssh("esxcli network vswitch standard list -v '#{vswitch}' | "\
-                       "grep Portgroups | "\
-                       'sed -E "s/^\s+Portgroups: //"')
-
+          r = exec_ssh("esxcli network vswitch standard list -v '#{vswitch}'")
           if r.exitstatus != 0
             raise Errors::ESXiError, message: "Unable to get port groups for vswitch '#{vswitch}'"
           end
 
-          r.strip.split(", ")
+          if m = VSWITCH_PORTGROUPS_IN_ESXCLI_RE.match(r.strip)
+            m[:portgroups].split(", ")
+          end
         end
 
         def remove_vswitch(vswitch)
@@ -153,6 +149,24 @@ module VagrantPlugins
           end
 
           m[:path]
+        end
+
+        def get_vms
+          r = exec_ssh("vim-cmd vmsvc/getallvms")
+          if r.exitstatus != 0
+            raise Errors::ESXiError, message: "Unable to get VMs"
+          end
+
+          ss = StringScanner.new(r.strip)
+          vms = []
+          while m = ss.scan_until(VM_INFO_IN_VMSVC_RE)
+            vms << VM_INFO_IN_VMSVC_RE.names.reduce({}) do |memo, k|
+              key = k.to_sym
+              memo[key] = ss[key]
+              memo
+            end
+          end
+          vms
         end
 
         def clone_vm_disk(source_vm_name, target_vm_name, datastore_path)

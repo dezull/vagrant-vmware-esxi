@@ -46,7 +46,8 @@ module VagrantPlugins
           @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                 message: "Destroying port group '#{port_group}'")
           unless remove_port_group(port_group, vswitch)
-            raise Errors::ESXiError, message: "Unable to remove port group '#{port_group}'"
+            @env[:ui].warn I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                   message: "Unable to remove port group '#{port_group}'. Probably already removed?")
           end
         end
 
@@ -66,7 +67,8 @@ module VagrantPlugins
           @env[:ui].detail I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
                                   message: "Destroying vswitch '#{vswitch}'")
           unless remove_vswitch(vswitch)
-            raise Errors::ESXiError, message: "Unable to remove vswitch '#{vswitch}'"
+            @env[:ui].warn I18n.t("vagrant_vmware_esxi.vagrant_vmware_esxi_message",
+                                   message: "Unable to remove vswitch '#{vswitch}'. Probably already removed?")
           end
         end
 
