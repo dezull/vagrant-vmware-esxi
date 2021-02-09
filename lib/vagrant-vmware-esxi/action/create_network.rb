@@ -102,20 +102,24 @@ module VagrantPlugins
             end
         end
 
-        def create_vswitch_unless_created(network_options)
-          @logger.info("Creating vSwitch '#{network_options[:esxi__vswitch]}' if not yet created")
+        def create_vswitch_unless_created(network_options, retries = 3)
+          @logger.info("Creating vSwitch '#{network_options[:esxi__vswitch]}' if not yet created (retries remain: #{retries})")
 
           vswitch = network_options[:esxi__vswitch]
           unless has_vswitch? vswitch
             if create_vswitch(vswitch)
               @created_vswitches << vswitch
             else
-              raise Errors::ESXiError, message: "Unable create new vSwitch '#{vswitch}'."
+              if retries > 0
+                create_vswitch_unless_created(network_options, retries -= 1)
+              else
+                raise Errors::ESXiError, message: "Unable create new vSwitch '#{vswitch}'."
+              end
             end
           end
         end
 
-        def create_port_group_unless_created(network_options)
+        def create_port_group_unless_created(network_options, retries = 3)
           port_groups = get_port_groups
           @logger.debug("Port groups: #{port_groups}")
 
@@ -140,10 +144,14 @@ module VagrantPlugins
           # TODO check max port groups per vSwitch (512)
 
           vswitch = network_options[:esxi__vswitch] || @default_vswitch
-          @logger.info("Creating port group #{network_options[:esxi__port_group]} on vSwitch '#{vswitch}'")
+          @logger.info("Creating port group #{network_options[:esxi__port_group]} on vSwitch '#{vswitch}' (retries remain: #{retries})")
           unless create_port_group(network_options[:esxi__port_group], vswitch, vlan)
-            raise Errors::ESXiError, message: "Cannot create port group "\
-              "`#{network_options[:esxi__port_group]}`, VLAN #{vlan}"
+            if retries > 0
+              create_port_group_unless_created(network_options, retries -= 1)
+            else
+              raise Errors::ESXiError, message: "Cannot create port group "\
+                "`#{network_options[:esxi__port_group]}`, VLAN #{vlan}"
+            end
           end
 
           @created_port_groups << network_options[:esxi__port_group]
