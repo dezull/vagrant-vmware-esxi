@@ -490,7 +490,7 @@ module VagrantPlugins
             src_path = clone_from_vm_path
           end
           ovf_cmd = "ovftool --noSSLVerify #{overwrite_opts} #{ovf_debug} "\
-                "--noDisks "\
+                "#{config.clone_from_vm.nil? ? '' : '--noDisks '}"\
                 "--acceptAllEulas "\
                 "-dm=#{guest_disk_type} #{local_laxoption} "\
                 "-ds=\"#{@guestvm_dsname}\" --name=\"#{desired_guest_name}\" "\
