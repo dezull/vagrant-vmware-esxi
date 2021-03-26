@@ -484,19 +484,33 @@ module VagrantPlugins
             raise Errors::ESXiConfigError,
                   message: "Exit due to WARNING.  See above for details."
           end
+
+          clone_disk = false
           if config.clone_from_vm.nil?
             src_path = new_vmx_file
           else
+            clone_disk = true
             src_path = clone_from_vm_path
           end
+
+          target_path =
+            if config.vcenter_hostname
+              # If the host is managed by vcenter, clone it there as --noDisks will fail
+              clone_disk = false
+              "vi://#{enc(config.vcenter_username)}:#{enc(config.vcenter_password)}"\
+              "@#{enc(config.vcenter_hostname)}/#{enc(config.vcenter_datacenter)}/host/#{enc(config.esxi_hostname)}"
+            else
+              "vi://#{config.esxi_username}:"\
+              "#{config.encoded_esxi_password}@#{config.esxi_hostname}"\
+              "#{esxi_resource_pool}"
+            end
+
           ovf_cmd = "ovftool --noSSLVerify #{overwrite_opts} #{ovf_debug} "\
-                "#{config.clone_from_vm.nil? ? '' : '--noDisks '}"\
+                "#{clone_disk ? '--noDisks ' : ''}"\
                 "--acceptAllEulas "\
                 "-dm=#{guest_disk_type} #{local_laxoption} "\
                 "-ds=\"#{@guestvm_dsname}\" --name=\"#{desired_guest_name}\" "\
-                "\"#{src_path}\" vi://#{config.esxi_username}:"\
-                "#{config.encoded_esxi_password}@#{config.esxi_hostname}"\
-                "#{esxi_resource_pool}"
+                "\"#{src_path}\" #{target_path}"
 
           #
           #  Security alert! If password debugging is enabled, Password will
@@ -525,7 +539,7 @@ module VagrantPlugins
             FileUtils.remove_entry tmpdir unless tmpdir.nil?
           end
 
-          if config.clone_from_vm
+          if config.clone_from_vm && clone_disk
             connect_ssh do
               env[:ui].info I18n.t('vagrant_vmware_esxi.vagrant_vmware_esxi_message',
                                    message: "Cloning VM disk '#{config.clone_from_vm}' into '#{desired_guest_name}'")
@@ -812,6 +826,12 @@ module VagrantPlugins
 
           @logger.info("Networks: #{@guestvm_network}")
         end
+
+        private
+
+          def enc(str)
+            URI.encode_www_form_component(str)
+          end
       end
     end
   end

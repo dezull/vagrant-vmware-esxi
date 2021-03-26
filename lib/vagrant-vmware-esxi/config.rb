@@ -11,6 +11,10 @@ module VagrantPlugins
       attr_accessor :encoded_esxi_password
       attr_accessor :esxi_disk_store
       attr_accessor :esxi_virtual_network
+      attr_accessor :vcenter_hostname
+      attr_accessor :vcenter_username
+      attr_accessor :vcenter_password
+      attr_accessor :vcenter_datacenter
       attr_accessor :default_vswitch
       attr_accessor :default_port_group
       attr_accessor :destroy_unused_port_groups
@@ -74,6 +78,10 @@ module VagrantPlugins
         @encoded_esxi_password = nil
         @esxi_disk_store = nil
         @esxi_virtual_network = nil
+        @vcenter_hostname = nil
+        @vcenter_username = nil
+        @vcenter_password = nil
+        @vcenter_datacenter = nil
         @default_vswitch = UNSET_VALUE
         @default_port_group = UNSET_VALUE
         @destroy_unused_port_groups = UNSET_VALUE
