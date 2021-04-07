@@ -25,9 +25,10 @@ module VagrantPlugins
 
         # @return [Hash] Map of port group to :vswitch, :clients (running VMs) and :vlan 
         def get_port_groups
-          r = exec_ssh("esxcli network vswitch standard portgroup list")
+          cmd = "esxcli network vswitch standard portgroup list"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get port groups"
+            raise_ssh_error(cmd, r, "Unable to get port groups")
           end
 
           # Active Client is *running* VM attached to the network
@@ -59,9 +60,10 @@ module VagrantPlugins
         end
 
         def get_vm_info(vm_name)
-          r = exec_ssh("vim-cmd vmsvc/getallvms | grep -E '\\s+#{vm_name}\\s+'")
+          cmd = "vim-cmd vmsvc/getallvms | grep -E '\\s+#{vm_name}\\s+'"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get VM info"
+            raise_ssh_error(cmd, r, "Unable to get VM info")
           end
 
           m = VM_INFO_IN_VMSVC_RE.match(r.strip)
@@ -74,12 +76,13 @@ module VagrantPlugins
           vmids = get_vms.map { |vm| vm[:id] }
 
           vmids.each do |vmid|
-            r = exec_ssh("vim-cmd vmsvc/get.networks #{vmid}")
+            cmd = "vim-cmd vmsvc/get.networks #{vmid}"
+            r = exec_ssh(cmd)
 
             next if r.match? "Unable to find a VM corresponding"
 
             if r.exitstatus != 0
-              raise Errors::ESXiError, message: "Unable to get port groups for vm '#{vmid}'"
+              raise_ssh_error(cmd, r, "Unable to get port groups for vm '#{vmid}'")
             end
 
             r.strip.split("\n").each do |line|
@@ -94,9 +97,10 @@ module VagrantPlugins
         end
 
         def get_vswitch_port_group_names(vswitch)
-          r = exec_ssh("esxcli network vswitch standard list -v '#{vswitch}'")
+          cmd = "esxcli network vswitch standard list -v '#{vswitch}'"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get port groups for vswitch '#{vswitch}'"
+            raise_ssh_error(cmd, r, "Unable to get port groups for vswitch '#{vswitch}'")
           end
 
           if m = VSWITCH_PORTGROUPS_IN_ESXCLI_RE.match(r.strip)
@@ -129,20 +133,22 @@ module VagrantPlugins
         def get_vmrc_uri
           machine = vagrant_env[:machine]
           hostname = machine.provider_config.esxi_hostname
-          r = exec_ssh("vim-cmd vmsvc/acquireticket #{machine.id} mks | "\
-                       "sed 's/localhost/#{hostname}/' | " \
-                       "grep -E '^vmrc://'")
+          cmd = "vim-cmd vmsvc/acquireticket #{machine.id} mks | "\
+                "sed 's/localhost/#{hostname}/' | " \
+                "grep -E '^vmrc://'"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get VMRC URI"
+            raise_ssh_error(cmd, r, "Unable to get VMRC URI")
           end
 
           r.strip
         end
 
         def get_datastore_path(datastore_name)
-          r = exec_ssh("vim-cmd hostsvc/datastore/info '#{datastore_name}' | grep path")
+          cmd = "vim-cmd hostsvc/datastore/info '#{datastore_name}' | grep path"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to find datastore #{datastore_name}"
+            raise_ssh_error(cmd, r, "Unable to find datastore #{datastore_name}")
           end
 
           m = DATASTORE_PATH_IN_ESXCLI_RE.match(r.strip)
@@ -154,9 +160,10 @@ module VagrantPlugins
         end
 
         def get_vms
-          r = exec_ssh("vim-cmd vmsvc/getallvms")
+          cmd = "vim-cmd vmsvc/getallvms"
+          r = exec_ssh(cmd)
           if r.exitstatus != 0
-            raise Errors::ESXiError, message: "Unable to get VMs"
+            raise_ssh_error(cmd, r, "Unable to get VMs")
           end
 
           ss = StringScanner.new(r.strip)
@@ -225,6 +232,13 @@ module VagrantPlugins
         end
 
         private
+
+          def raise_ssh_error(cmd, result, message)
+            if @logger
+              @logger.error { "`#{cmd}` exited with #{result.exitstatus}. Output:\n  #{result}" }
+            end
+            raise Errors::ESXiError, message: message
+          end
 
           def vagrant_env
             raise if @vagrant_env.nil?
