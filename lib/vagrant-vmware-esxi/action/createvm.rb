@@ -48,23 +48,8 @@ module VagrantPlugins
           end
 
           # Set desired_guest_name
-          if env[:machine].config.vm.hostname.nil? && config.guest_name.nil?
-            #  Nothing set, so generate our own
-            desired_guest_name = config.guest_name_prefix.strip
-            desired_guest_name << `hostname`.partition('.').first.strip
-            desired_guest_name << '-'
-            desired_guest_name << `whoami`.gsub!(/[^0-9A-Za-z]/, '').strip
-            desired_guest_name << '-'
-            base = File.basename machine.env.cwd.to_s
-            desired_guest_name << base
-          elsif !env[:machine].config.vm.hostname.nil? && config.guest_name.nil?
-            desired_guest_name = env[:machine].config.vm.hostname.dup
-          else
-            # Both are set, or only guest_name. So, we'll choose guest_name.
-            desired_guest_name = config.guest_name.strip
-          end
-          desired_guest_name = desired_guest_name[0..252].gsub(/_/,'-').gsub(/[^0-9A-Za-z\-\.]/i, '').strip
-          @logger.info("vagrant-vmware-esxi, createvm: config.guest_name: #{config.guest_name}")
+          desired_guest_name = config.saved_guest_name
+          @logger.info("vagrant-vmware-esxi, createvm: guest_name: #{desired_guest_name}")
 
           #  Source vmx / vmdk files
           src_dir = env[:machine].box.directory

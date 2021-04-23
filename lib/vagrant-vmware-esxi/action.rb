@@ -136,6 +136,7 @@ module VagrantPlugins
       def self.action_destroy
         Vagrant::Action::Builder.new.tap do |b|
           b.use SetESXiPassword
+          b.use SetGuestName
           b.use Call, ReadState do |env1, b1|
             b1.use Halt unless env1[:machine_state] == 'powered_off'
             b1.use ReadState
@@ -177,6 +178,7 @@ module VagrantPlugins
           b.use HandleBox
           b.use ReadState
           b.use CreateNetwork
+          b.use SetGuestName
           b.use CreateVM
           b.use ReadState
           b.use Boot
@@ -223,6 +225,7 @@ module VagrantPlugins
 
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
       autoload :SetESXiPassword, action_root.join('esxi_password')
+      autoload :SetGuestName, action_root.join('set_guest_name')
       autoload :CreateVM, action_root.join('createvm')
       autoload :CreateNetwork, action_root.join('create_network')
       autoload :ReadState, action_root.join('read_state')

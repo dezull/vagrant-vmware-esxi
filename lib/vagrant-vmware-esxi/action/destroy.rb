@@ -1,18 +1,22 @@
 require 'log4r'
 require 'net/ssh'
+require 'vagrant-vmware-esxi/util/esxcli'
 
 module VagrantPlugins
   module ESXi
     module Action
       # This action will Destroy VM. unregister and delete the VM from disk.
       class Destroy
+        include Util::ESXCLI
+
         def initialize(app, _env)
           @app    = app
           @logger = Log4r::Logger.new('vagrant_vmware_esxi::action::destroy')
         end
 
         def call(env)
-          destroy(env)
+          @env = env
+          connect_ssh { destroy(env) }
           @app.call(env)
         end
 
@@ -27,30 +31,25 @@ module VagrantPlugins
           @logger.info('vagrant-vmware-esxi, destroy: current state: '\
                        "#{env[:machine_state]}")
 
+          destroyed = false
           if env[:machine_state].to_s == 'not_created'
-            env[:ui].info I18n.t('vagrant_vmware_esxi.already_destroyed')
+            if config.destroy_vm_by_name
+              env[:ui].warn I18n.t('vagrant_vmware_esxi.destroy_vm_by_name', name: config.saved_guest_name)
+              destroyed = true if destroy_vm_by_name(config.saved_guest_name)
+            end
+
+            env[:ui].info I18n.t('vagrant_vmware_esxi.already_destroyed') unless destroyed
           elsif env[:machine_state].to_s != 'powered_off'
             raise Errors::ESXiError,
                   message: 'Guest VM should have been powered off...'
           else
-            Net::SSH.start(config.esxi_hostname, config.esxi_username,
-              password:                   config.esxi_password,
-              port:                       config.esxi_hostport,
-              keys:                       config.local_private_keys,
-              timeout:                    20,
-              number_of_password_prompts: 0,
-              non_interactive:            true
-            ) do |ssh|
+            destroy_vm(machine.id)
+            destroyed = true
+          end
 
-              r = ssh.exec!("vim-cmd vmsvc/destroy #{machine.id}")
-              if r.exitstatus != 0
-                raise Errors::ESXiError,
-                      message: "Unable to destroy the VM:\n"\
-                                 "  #{r}"
-              end
-              env[:ui].info I18n.t('vagrant_vmware_esxi.vagrant_vmware_esxi_message',
-                                   message: 'VM has been destroyed...')
-            end
+          if destroyed
+            env[:ui].info I18n.t('vagrant_vmware_esxi.vagrant_vmware_esxi_message',
+                                 message: 'VM has been destroyed...')
           end
         end
       end

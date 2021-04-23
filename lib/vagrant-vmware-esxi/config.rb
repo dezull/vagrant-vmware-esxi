@@ -20,6 +20,7 @@ module VagrantPlugins
       attr_accessor :destroy_unused_port_groups
       attr_accessor :destroy_unused_vswitches
       attr_accessor :destroy_unused_networks
+      attr_accessor :destroy_vm_by_name
       attr_accessor :esxi_resource_pool
       attr_accessor :clone_from_vm
       attr_accessor :guest_username
@@ -49,6 +50,7 @@ module VagrantPlugins
       attr_accessor :supported_guest_nic_types
       attr_accessor :supported_guest_guestos
       attr_accessor :saved_ipaddress
+      attr_accessor :saved_guest_name
 
       #
       #  legacy (1.x) config entries
@@ -87,6 +89,7 @@ module VagrantPlugins
         @destroy_unused_port_groups = UNSET_VALUE
         @destroy_unused_vswitches = UNSET_VALUE
         @destroy_unused_networks = UNSET_VALUE
+        @destroy_vm_by_name = UNSET_VALUE
         @esxi_resource_pool = nil
         @clone_from_vm = nil
         @guest_username = 'vagrant'
@@ -111,6 +114,7 @@ module VagrantPlugins
         @local_failonwarning = 'False'
         @debug = 'False'
         @saved_ipaddress = nil
+        @saved_guest_name = nil
         @supported_guest_virtualhw_versions = [
           4,7,8,9,10,11,12,13,14
         ]
@@ -408,6 +412,7 @@ module VagrantPlugins
           @destroy_unused_port_groups = true
           @destroy_unused_vswitches = true
         end
+        @destroy_vm_by_name = false if @destroy_vm_by_name == UNSET_VALUE
 
         @local_private_keys = [
           '~/.ssh/id_rsa',
@@ -447,6 +452,7 @@ module VagrantPlugins
          @guest_snapshot_quiesced = ''
        end
        @saved_ipaddress = nil
+       @saved_guest_name = nil
 
       end
     end

@@ -59,15 +59,9 @@ module VagrantPlugins
           end.to_h
         end
 
-        def get_vm_info(vm_name)
-          cmd = "vim-cmd vmsvc/getallvms | grep -E '\\s+#{vm_name}\\s+'"
-          r = exec_ssh(cmd)
-          if r.exitstatus != 0
-            raise_ssh_error(cmd, r, "Unable to get VM info")
-          end
-
-          m = VM_INFO_IN_VMSVC_RE.match(r.strip)
-          m.named_captures
+        def get_vm_info(matcher)
+          key, value = matcher.to_a.first
+          get_vms.find { |vm| vm[key] == value }
         end
 
         # Port groups that are attached to any VM
@@ -179,13 +173,28 @@ module VagrantPlugins
         end
 
         def clone_vm_disk(source_vm_name, target_vm_name, datastore_path)
-          vm_info = get_vm_info(source_vm_name)
-          src_disk = "#{datastore_path}/#{vm_info["vmx"].gsub(/vmx$/, "vmdk")}"
+          vm_info = get_vm_info(name: source_vm_name.to_s)
+          src_disk = "#{datastore_path}/#{vm_info[:vmx].gsub(/vmx$/, "vmdk")}"
           target_disk = "#{datastore_path}/#{target_vm_name}/#{target_vm_name}.vmdk"
           r = exec_ssh("rm #{datastore_path}/#{target_vm_name}/*.vmdk && "\
                        "vmkfstools -d thin -i '#{src_disk}' '#{target_disk}'")
 
           r.exitstatus == 0
+        end
+
+        def destroy_vm(id)
+          r = exec_ssh("vim-cmd vmsvc/destroy #{id}")
+          if r.exitstatus != 0
+            raise_ssh_error(cmd, r, "Unable to get port groups")
+          end
+        end
+
+        def destroy_vm_by_name(name)
+          if vm = get_vm_info(name: name)
+            destroy_vm(vm[:id])
+          else
+            false
+          end
         end
 
         # Client should probably never use this, add a method in this module instead

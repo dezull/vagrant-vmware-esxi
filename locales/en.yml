@@ -38,6 +38,11 @@ en:
       The VM is already suspended.
     already_destroyed: |-
       The VM is destroyed.
+    destroy_vm_by_name: |-
+      Destroy VM by name '%{name}' (This will destroy the VM even if it was *NOT* created by this environment)
+    destroy_vm_by_name_not_destroyed: |-
+      VM '%{name}' not destroyed
+    destroy_vm_by_name_not_found: |-
     snapshot_saved: |-
       The snapshot has been saved.
     snapshot_deleted: |-
